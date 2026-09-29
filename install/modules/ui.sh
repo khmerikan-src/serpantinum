@@ -12,6 +12,7 @@ C_MAGENTA=$'\e[35m'
 
 ENABLE_TELEMETRY=true
 INSTALL_FULL_WALLPAPERS=true
+INSTALL_WALLPAPERS=true
 SELECTED_COMPOSITORS=()
 DETECTED_COMPOSITOR_LABEL=""
 MULTIPLE_COMPOSITORS_DETECTED=false
@@ -468,11 +469,17 @@ run_installer_ui() {
 
             local S_SDDM="${DIM}[OFF]${RESET}"
             local S_TEL="${DIM}[OFF]${RESET}"
-            local S_WP="${DIM}[3 Random]${RESET}"
+            local S_WP="${DIM}[Skip]${RESET}"
 
             [ "$OPT_SDDM" = true ] && S_SDDM="${C_GREEN}[ON]${RESET}"
             [ "$ENABLE_TELEMETRY" = true ] && S_TEL="${C_GREEN}[ON]${RESET}"
-            [ "$INSTALL_FULL_WALLPAPERS" = true ] && S_WP="${C_GREEN}[Full Pack]${RESET}"
+            if [ "$INSTALL_WALLPAPERS" = true ]; then
+                if [ "$INSTALL_FULL_WALLPAPERS" = true ]; then
+                    S_WP="${C_GREEN}[Full Pack]${RESET}"
+                else
+                    S_WP="${C_GREEN}[3 Random]${RESET}"
+                fi
+            fi
 
             local items=()
             items+=("1. $(t "installer.ui.menu_overview" "count=${#REQUIRED_PKGS[@]}")")
@@ -534,7 +541,12 @@ run_installer_ui() {
                     break
                     ;;
                 "4")
-                    INSTALL_FULL_WALLPAPERS=$([ "$INSTALL_FULL_WALLPAPERS" = true ] && echo false || echo true)
+                    if [ "$INSTALL_WALLPAPERS" = true ]; then
+                        INSTALL_WALLPAPERS=false
+                    else
+                        INSTALL_WALLPAPERS=true
+                        INSTALL_FULL_WALLPAPERS=$([ "$INSTALL_FULL_WALLPAPERS" = true ] && echo false || echo true)
+                    fi
                     ;;
                 "5")
                     ENABLE_TELEMETRY=$([ "$ENABLE_TELEMETRY" = true ] && echo false || echo true)
@@ -593,7 +605,12 @@ run_installer_ui() {
                             break
                             ;;
                         *"4."*)
-                            INSTALL_FULL_WALLPAPERS=$([ "$INSTALL_FULL_WALLPAPERS" = true ] && echo false || echo true)
+                            if [ "$INSTALL_WALLPAPERS" = true ]; then
+                                INSTALL_WALLPAPERS=false
+                            else
+                                INSTALL_WALLPAPERS=true
+                                INSTALL_FULL_WALLPAPERS=$([ "$INSTALL_FULL_WALLPAPERS" = true ] && echo false || echo true)
+                            fi
                             ;;
                         *"5."*)
                             ENABLE_TELEMETRY=$([ "$ENABLE_TELEMETRY" = true ] && echo false || echo true)
