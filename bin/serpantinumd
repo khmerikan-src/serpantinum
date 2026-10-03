@@ -7,6 +7,14 @@ if [ -z "$SERPANTINUM_DIR" ]; then
     export SERPANTINUM_DIR="$(dirname "$BIN_DIR")/src"
 fi
 
+# Qt resolves theme icons (image://icon/...) through the platform theme's
+# icon-theme setting. Without this, QIcon falls back to a theme that lacks
+# many app icons (e.g. org.xfce.thunar, org.gnome.Ptyxis) and they render as
+# Qt's pink/black checkerboard. Only set it if the caller hasn't chosen one.
+if [ -z "$QT_QPA_PLATFORMTHEME" ]; then
+    export QT_QPA_PLATFORMTHEME=gtk3
+fi
+
 source "$SERPANTINUM_DIR/scripts/caching.sh"
 source "$SERPANTINUM_DIR/scripts/config.sh"
 source "$SERPANTINUM_DIR/scripts/i18n.sh"
