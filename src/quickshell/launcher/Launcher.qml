@@ -1839,7 +1839,10 @@ PanelWindow {
                                                 fillMode: Image.PreserveAspectFit
                                                 asynchronous: true
                                                 smooth: true
-                                                mipmap: true
+                                                // mipmap disabled: Qt's image://icon/ provider returns
+                                                // images that fail texture upload with mipmap
+                                                // enabled (renders as pink/black checkers).
+                                                mipmap: false
 
                                                 onStatusChanged: {
                                                     if (status === Image.Error) {

@@ -219,6 +219,12 @@ while [[ "$1" == -* ]]; do
     esac
 done
 
+# Skip launching when KineticWE (kwin) is detected
+if [[ -n "$XDG_CURRENT_DESKTOP" && ("$XDG_CURRENT_DESKTOP" == *kwin* || "$XDG_CURRENT_DESKTOP" == *kwin-wayland* || "$XDG_CURRENT_DESKTOP" == *kineticwe* || "$XDG_CURRENT_DESKTOP" == *kineticwe-wayland*) ]]; then
+    echo "kwin detected, not launching serpantinum"
+    exit 0
+fi
+
 if [ $# -eq 0 ]; then
     show_help
     exit 0

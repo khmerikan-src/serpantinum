@@ -1001,7 +1001,10 @@ Item {
                                         fillMode: Image.PreserveAspectFit
                                         asynchronous: true
                                         smooth: true
-                                        mipmap: true
+                                        // mipmap disabled: Qt's image://icon/ provider returns images that
+                                        // fail texture upload with mipmap enabled (renders as pink/black
+                                        // checkers). mipmap: false
+                                        mipmap: false
                                         visible: model.icon !== "" && status === Image.Ready
                                         source: {
                                             let ic = model.icon || "";
@@ -1461,7 +1464,10 @@ Item {
                                         fillMode: Image.PreserveAspectFit
                                         asynchronous: true
                                         smooth: true
-                                        mipmap: true
+                                        // mipmap disabled: Qt's image://icon/ provider returns images that
+                                        // fail texture upload with mipmap enabled (renders as pink/black
+                                        // checkers). mipmap: false
+                                        mipmap: false
                                         visible: model.icon !== "" && status === Image.Ready
                                         source: {
                                             let ic = model.icon || "";

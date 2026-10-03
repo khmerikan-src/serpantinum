@@ -127,7 +127,10 @@ Item {
                             sourceSize: Qt.size(64, 64)
                             fillMode: Image.PreserveAspectFit
                             smooth: true
-                            mipmap: true
+                            // mipmap disabled: Qt's image://icon/ provider returns
+                            // images that fail texture upload with mipmap
+                            // enabled (renders as pink/black checkers).
+                            mipmap: false
                         }
                     }
 
