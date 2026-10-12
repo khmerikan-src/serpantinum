@@ -64,7 +64,7 @@ Item {
             let period = hour >= 12 ? "PM" : "AM";
             let h12 = hour % 12;
             if (h12 === 0) h12 = 12;
-            return h12 + period;
+            return h12 + " " + period;
         }
 
         return (hour < 10 ? "0" + hour : hour) + ":00";
