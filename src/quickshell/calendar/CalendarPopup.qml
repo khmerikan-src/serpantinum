@@ -322,6 +322,33 @@ Item {
         }
     }
 
+    function formatHour(timeStr) {
+        if (!timeStr) return "";
+        let str = String(timeStr).trim();
+        if (str.toLowerCase().indexOf("am") !== -1 || str.toLowerCase().indexOf("pm") !== -1) {
+            return str;
+        }
+        let hour = 0;
+        if (str.indexOf(":") !== -1) {
+            hour = parseInt(str.split(":")[0], 10);
+        } else {
+            let num = parseInt(str, 10);
+            if (!isNaN(num)) {
+                hour = num >= 100 ? Math.floor(num / 100) : num;
+            }
+        }
+        if (isNaN(hour)) return str;
+
+        if (DateTime.is12Hour) {
+            let period = hour >= 12 ? "PM" : "AM";
+            let h12 = hour % 12;
+            if (h12 === 0) h12 = 12;
+            return h12 + ":00 " + period;
+        }
+
+        return (hour < 10 ? "0" + hour : hour) + ":00";
+    }
+
     function setWeatherView(idx) {
         if (idx < 0 || idx > 4 || !window.weatherData) return;
         if (idx === window.targetWeatherView) return;
@@ -771,7 +798,7 @@ Item {
 
                                     Text {
                                         Layout.alignment: Qt.AlignHCenter
-                                        text: modelData ? modelData.time : ""
+                                        text: modelData ? window.formatHour(modelData.time) : ""
                                         font.family: ThemeBackend.fontFamily
                                         font.weight: Font.Bold
                                         font.pixelSize: window.s(11.5)
