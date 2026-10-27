@@ -50,7 +50,10 @@ Flickable {
                 anchors.margins: view.rootObj.s(4)
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
-                mipmap: true
+                // mipmap disabled: Qt's image://icon/ provider returns images that
+                // fail texture upload with mipmap enabled (renders as pink/black
+                // checkers).
+                mipmap: false
                 visible: status === Image.Ready
                 source: view.tab.iconSource(appLabel.info.icon)
             }

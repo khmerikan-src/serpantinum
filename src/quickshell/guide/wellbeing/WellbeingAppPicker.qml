@@ -145,7 +145,10 @@ Item {
                                 anchors.margins: rootObj.s(3)
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                mipmap: true
+                                // mipmap disabled: Qt's image://icon/ provider returns images that
+                                // fail texture upload with mipmap enabled (renders as pink/black
+                                // checkers).
+                                mipmap: false
                                 visible: status === Image.Ready
                                 source: picker.tab.iconSource(row.modelData.icon)
                             }

@@ -145,7 +145,10 @@ Scope {
                             anchors.margins: 10
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
-                            mipmap: true
+                            // mipmap disabled: Qt's image://icon/ provider returns images that
+                            // fail texture upload with mipmap enabled (renders as pink/black
+                            // checkers).
+                            mipmap: false
                             visible: status === Image.Ready
                             source: overlayScope.iconSource(overlayScope.iconName)
                         }
