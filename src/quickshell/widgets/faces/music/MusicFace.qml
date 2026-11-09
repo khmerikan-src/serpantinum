@@ -41,10 +41,10 @@ Item {
     function updateSubscription() {
         if (isVisVisible && !isSubscribed) {
             isSubscribed = true;
-            Cava.registerConsumer();
+            Spectrum.registerConsumer();
         } else if (!isVisVisible && isSubscribed) {
             isSubscribed = false;
-            Cava.unregisterConsumer();
+            Spectrum.unregisterConsumer();
         }
     }
 
@@ -70,7 +70,7 @@ Item {
     Component.onDestruction: {
         if (isSubscribed) {
             isSubscribed = false;
-            Cava.unregisterConsumer();
+            Spectrum.unregisterConsumer();
         }
     }
 
@@ -178,7 +178,7 @@ Item {
                         maskSource: artMask
                     }
 
-                    Image {
+                    BoundedImage {
                         id: artImg
                         anchors.fill: parent
                         source: (root.isMediaActive && MprisController.artUrl) ? (MprisController.artUrl.startsWith("file://") || MprisController.artUrl.startsWith("http") ? MprisController.artUrl : "file://" + MprisController.artUrl) : ""

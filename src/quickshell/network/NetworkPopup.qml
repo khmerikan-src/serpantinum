@@ -166,9 +166,6 @@ Item {
             popupWindowRoot.rebuildEthData();
             popupWindowRoot.rebuildWifiData();
             popupWindowRoot.rebuildBtData(false);
-            popupWindowRoot.fetchIpData();
-            popupWindowRoot.fetchFreqData();
-            popupWindowRoot.fetchConnectivityData();
             if (popupWindowRoot.activeMode === "bt" && !btProfilePoller.running) btProfilePoller.running = true;
         } else {
             exitAnim.stop();
@@ -176,10 +173,9 @@ Item {
             popupWindowRoot.stopBtScan();
             popupWindowRoot.stopWifiScan();
             btProfilePoller.running = false;
-            ipFetcher.running = false;
-            freqFetcher.running = false;
             btConnectSimTimer.stop();
             btConnectDelayTimer.stop();
+            btLinkDropTimer.stop();
             busyTimeout.stop();
             failClearTimer.stop();
             btRebuildDebounce.stop();
@@ -190,7 +186,12 @@ Item {
             popupWindowRoot.pendingWifiId = "";
             popupWindowRoot.pendingWifiSsid = "";
             popupWindowRoot.pendingPairThenConnect = "";
+            popupWindowRoot.connectAfterLinkDrop = "";
             popupWindowRoot.btOpsInFlight = ({});
+            popupWindowRoot.busyTasks = ({});
+            popupWindowRoot.disconnectingDevices = ({});
+            popupWindowRoot.connectingId = "";
+            popupWindowRoot.failedId = "";
             popupWindowRoot.hoveredCardCount = 0;
             popupWindowRoot.disconnectHoverCount = 0;
             popupWindowRoot.introState = 0.0;
@@ -300,7 +301,14 @@ Item {
                 Connections {
                     target: device || null
                     ignoreUnknownSignals: true
-                    function onConnectedChanged() { popupWindowRoot.requestBtRebuild(); }
+                    function onConnectedChanged() {
+                        popupWindowRoot.requestBtRebuild();
+                        if (device && !device.connected && popupWindowRoot.connectAfterLinkDrop === device.address) {
+                            popupWindowRoot.connectAfterLinkDrop = "";
+                            btLinkDropTimer.stop();
+                            popupWindowRoot.connectPairedDevice(device.address);
+                        }
+                    }
                     function onBatteryChanged() { popupWindowRoot.requestBtRebuild(); }
                     function onBatteryAvailableChanged() { popupWindowRoot.requestBtRebuild(); }
                     function onStateChanged() { popupWindowRoot.requestBtRebuild(); }
@@ -308,19 +316,15 @@ Item {
                         popupWindowRoot.requestBtRebuild();
                         if (device && device.paired && popupWindowRoot.pendingPairThenConnect === device.address) {
                             popupWindowRoot.pendingPairThenConnect = "";
-                            let mac = device.address;
-                            popupWindowRoot.withBtOpLock(mac, function() {
-                                let devList = popupWindowRoot.getBtDevicesList();
-                                let d = null;
-                                for (let i = 0; i < devList.length; i++) {
-                                    if (devList[i] && devList[i].address === mac) { d = devList[i]; break; }
-                                }
-                                if (!d) return;
-                                d.connect();
-                                btConnectSimTimer.targetId = popupWindowRoot.connectingId;
-                                btConnectSimTimer.attemptId = popupWindowRoot.activeConnectId;
-                                btConnectSimTimer.restart();
-                            });
+                            if (device.connected) {
+                                // BlueZ still reports the pairing link as connected, so connect() would be
+                                // ignored ("already connected") and the device would stay paired but disconnected.
+                                // Connect once that link drops (onConnectedChanged).
+                                popupWindowRoot.connectAfterLinkDrop = device.address;
+                                btLinkDropTimer.restart();
+                                return;
+                            }
+                            popupWindowRoot.connectPairedDevice(device.address);
                         }
                     }
                     function onTrustedChanged() { popupWindowRoot.requestBtRebuild(); }
@@ -411,92 +415,37 @@ Item {
         }
     }
 
-    property string fetchedEthIp: ""
-    property string fetchedWifiIp: ""
-    property string fetchedWifiFreq: ""
-    property string lastFetchedEthMac: ""
-    property string lastFetchedWifiSsid: ""
+    property var coreInterfaces: ({})
     property string wifiDeviceName: ""
     property string connectivityState: "unknown"
-    readonly property string wifiConnectedSsid: popupWindowRoot.isWifiConn ? (popupWindowRoot.wifiConnected.ssid || "") : ""
     readonly property string portalProbeUrl: "http://nmcheck.gnome.org/check_network_status.txt"
 
-    onWifiConnectedSsidChanged: {
-        popupWindowRoot.connectivityState = "unknown";
-        popupWindowRoot.fetchConnectivityData();
+    function interfaceIp(name) {
+        let iface = popupWindowRoot.coreInterfaces[name];
+        return iface && iface.ipv4 ? iface.ipv4 : "";
+    }
+
+    function interfaceFreq(name) {
+        let iface = popupWindowRoot.coreInterfaces[name];
+        return iface && iface.frequency ? String(iface.frequency) : "";
     }
 
     Process {
-        id: connectivityFetcher
-        command: ["sh", "-c", "command -v nmcli >/dev/null 2>&1 && nmcli -t -g CONNECTIVITY general"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let state = this.text.trim() || "unknown";
-                if (state === popupWindowRoot.connectivityState) return;
-                popupWindowRoot.connectivityState = state;
-                if (popupWindowRoot.activeMode === "wifi" && popupWindowRoot.isWifiConn) popupWindowRoot.updateInfoNodes();
-            }
-        }
-    }
-
-    Process {
-        id: ipFetcher
-        command: ["ip", "-4", "-j", "addr", "show"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    let data = JSON.parse(this.text.trim());
-                    let eIp = ""; let wIp = "";
-                    for (let i = 0; i < data.length; i++) {
-                        let iface = data[i];
-                        if (iface.ifname === popupWindowRoot.ethDeviceName && iface.addr_info && iface.addr_info.length > 0) {
-                            eIp = iface.addr_info[0].local || "";
-                        }
-                        if (iface.ifname === popupWindowRoot.wifiDeviceName && iface.addr_info && iface.addr_info.length > 0) {
-                            wIp = iface.addr_info[0].local || "";
-                        }
-                    }
-                    popupWindowRoot.fetchedEthIp = eIp;
-                    popupWindowRoot.fetchedWifiIp = wIp;
-                    if (popupWindowRoot.ethDeviceName !== "") popupWindowRoot.rebuildEthData();
-                    if (popupWindowRoot.wifiDeviceName !== "") popupWindowRoot.rebuildWifiData();
-                } catch(e) {}
-            }
-        }
-    }
-
-    Process {
-        id: freqFetcher
-        command: popupWindowRoot.wifiDeviceName !== "" ? ["iw", "dev", popupWindowRoot.wifiDeviceName, "link"] : ["echo"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let lines = this.text.split('\n');
-                let f = "";
-                for (let i = 0; i < lines.length; i++) {
-                    let line = lines[i].trim();
-                    if (line.indexOf("freq:") === 0) {
-                        f = line.substring(5).trim();
-                        break;
-                    }
-                }
-                popupWindowRoot.fetchedWifiFreq = f;
+        id: networkWatcher
+        running: popupWindowRoot.visible
+        command: ["serpantinum-core", "watch", "network"]
+        stdout: SplitParser {
+            onRead: data => {
+                let state;
+                try { state = JSON.parse(data); } catch (e) { return; }
+                let connectivity = state.connectivity || "unknown";
+                let connectivityChanged = connectivity !== popupWindowRoot.connectivityState;
+                popupWindowRoot.coreInterfaces = state.interfaces || {};
+                popupWindowRoot.connectivityState = connectivity;
+                if (popupWindowRoot.ethDeviceName !== "") popupWindowRoot.rebuildEthData();
                 if (popupWindowRoot.wifiDeviceName !== "") popupWindowRoot.rebuildWifiData();
+                if (connectivityChanged && popupWindowRoot.activeMode === "wifi" && popupWindowRoot.isWifiConn) popupWindowRoot.updateInfoNodes();
             }
-        }
-    }
-
-    function fetchIpData() { if (popupWindowRoot.visible) ipFetcher.running = true; }
-    function fetchConnectivityData() { if (popupWindowRoot.visible && popupWindowRoot.isWifiConn) connectivityFetcher.running = true; }
-    function fetchFreqData() { if (popupWindowRoot.visible && popupWindowRoot.wifiDeviceName !== "") freqFetcher.running = true; }
-
-    Timer {
-        interval: 5000
-        running: popupWindowRoot.visible && (popupWindowRoot.isEthConn || popupWindowRoot.isWifiConn)
-        repeat: true
-        onTriggered: {
-            if (popupWindowRoot.isEthConn || popupWindowRoot.isWifiConn) popupWindowRoot.fetchIpData();
-            if (popupWindowRoot.isWifiConn) popupWindowRoot.fetchFreqData();
-            if (popupWindowRoot.isWifiConn && popupWindowRoot.connectivityState !== "full") popupWindowRoot.fetchConnectivityData();
         }
     }
 
@@ -628,6 +577,16 @@ Item {
     property bool ignoreNextModeFileUpdate: false
 
     FileView {
+        id: modeFileWriter
+        path: popupWindowRoot.modeFilePath
+        watchChanges: true
+        onFileChanged: reload()
+        onLoadFailed: error => {
+            if (error === FileViewError.FileNotFound) modeFileWriter.setText(popupWindowRoot.activeMode + "\n");
+        }
+    }
+
+    FileView {
         id: modeFile
         path: popupWindowRoot.modeFilePath
         watchChanges: popupWindowRoot.visible
@@ -648,8 +607,6 @@ Item {
     }
 
     Component.onCompleted: {
-        Quickshell.execDetached(["bash", "-c", "mkdir -p '" + popupWindowRoot.cacheDir + "'; if [ ! -f '" + popupWindowRoot.modeFilePath + "' ]; then echo '" + activeMode + "' > '" + popupWindowRoot.modeFilePath + "'; fi"]);
-
         popupWindowRoot.findDevices();
         popupWindowRoot.rebuildEthData();
         popupWindowRoot.rebuildWifiData();
@@ -696,6 +653,25 @@ Item {
 
     property var btOpsInFlight: ({})
     property string pendingPairThenConnect: ""
+    property string connectAfterLinkDrop: ""
+
+    function connectPairedDevice(mac) {
+        popupWindowRoot.withBtOpLock(mac, function() {
+            let devList = popupWindowRoot.getBtDevicesList();
+            let d = null;
+            for (let i = 0; i < devList.length; i++) {
+                if (devList[i] && devList[i].address === mac) { d = devList[i]; break; }
+            }
+            if (!d) return;
+            d.connect();
+            btConnectSimTimer.targetId = popupWindowRoot.connectingId;
+            btConnectSimTimer.attemptId = popupWindowRoot.activeConnectId;
+            btConnectSimTimer.restart();
+        });
+    }
+
+    // If the pairing link never drops, the device stayed connected and there is nothing left to do
+    Timer { id: btLinkDropTimer; interval: 15000; onTriggered: popupWindowRoot.connectAfterLinkDrop = "" }
 
     function isBtOpBusy(mac) {
         return !!popupWindowRoot.btOpsInFlight[mac];
@@ -741,6 +717,23 @@ Item {
 
     property string pendingWifiSsid: ""
     property string pendingWifiId: ""
+
+    function wifiSecurityLabel(type) {
+        switch (type) {
+        case WifiSecurityType.Open: return "Open";
+        case WifiSecurityType.Owe: return "OWE";
+        case WifiSecurityType.StaticWep:
+        case WifiSecurityType.DynamicWep: return "WEP";
+        case WifiSecurityType.WpaPsk: return "WPA";
+        case WifiSecurityType.Wpa2Psk: return "WPA2";
+        case WifiSecurityType.Sae: return "WPA3";
+        case WifiSecurityType.WpaEap: return "WPA Enterprise";
+        case WifiSecurityType.Wpa2Eap: return "WPA2 Enterprise";
+        case WifiSecurityType.Wpa3SuiteB192: return "WPA3 Enterprise";
+        case WifiSecurityType.Leap: return "Enterprise";
+        default: return "Secure";
+        }
+    }
 
     property int activeConnectId: 0
 
@@ -863,7 +856,7 @@ Item {
     onActiveModeChanged: {
         popupWindowRoot.cardIntroDelay = 0;
         if (!popupWindowRoot.ignoreNextModeFileUpdate) {
-            Quickshell.execDetached(["bash", "-c", "mkdir -p '" + popupWindowRoot.cacheDir + "' && echo '" + popupWindowRoot.activeMode + "' > '" + popupWindowRoot.modeFilePath + "'"]);
+            modeFileWriter.setText(popupWindowRoot.activeMode + "\n");
         }
         popupWindowRoot.ignoreNextModeFileUpdate = false;
 
@@ -1122,18 +1115,12 @@ Item {
 
         let newConnected = null;
         if (popupWindowRoot.ethDevice.connected) {
-            if (popupWindowRoot.lastFetchedEthMac !== popupWindowRoot.ethDevice.address) {
-                popupWindowRoot.lastFetchedEthMac = popupWindowRoot.ethDevice.address || "";
-                popupWindowRoot.fetchIpData();
-            }
             newConnected = {
                 id: popupWindowRoot.ethDeviceName,
                 mac: popupWindowRoot.ethDevice.address || "",
                 speed: popupWindowRoot.ethDevice.linkSpeed ? popupWindowRoot.ethDevice.linkSpeed.toString() + " Mbps" : "",
-                ip: popupWindowRoot.fetchedEthIp
+                ip: popupWindowRoot.interfaceIp(popupWindowRoot.ethDeviceName)
             };
-        } else {
-            popupWindowRoot.lastFetchedEthMac = "";
         }
 
         if (!popupWindowRoot.deepEqual(popupWindowRoot.ethConnected, newConnected)) {
@@ -1188,15 +1175,7 @@ Item {
                 let net = nets[i];
                 if (!net || !net.name) continue;
 
-                let secStr = "Open";
-                if (net.security === 1) secStr = "WEP";
-                else if (net.security === 2) secStr = "WPA";
-                else if (net.security === 3) secStr = "WPA2";
-                else if (net.security === 4) secStr = "WPA3";
-                else if (net.security === 5) secStr = "WPA2/WPA3";
-                else if (net.security === 6) secStr = "Enterprise";
-                else if (net.security === 7) secStr = "OWE";
-                else if (net.security > 0) secStr = "Secure";
+                let secStr = popupWindowRoot.wifiSecurityLabel(net.security);
 
                 let sig = net.signalStrength !== undefined ? Math.round(net.signalStrength * 100) : 0;
                 if (sig > maxSig) { maxSig = sig; bestSsid = net.name; }
@@ -1214,13 +1193,8 @@ Item {
                 };
 
                 if (net.connected) {
-                    if (popupWindowRoot.lastFetchedWifiSsid !== net.name) {
-                        popupWindowRoot.lastFetchedWifiSsid = net.name;
-                        popupWindowRoot.fetchIpData();
-                        popupWindowRoot.fetchFreqData();
-                    }
-                    nObj.ip = popupWindowRoot.fetchedWifiIp;
-                    nObj.freq = popupWindowRoot.fetchedWifiFreq;
+                    nObj.ip = popupWindowRoot.interfaceIp(popupWindowRoot.wifiDeviceName);
+                    nObj.freq = popupWindowRoot.interfaceFreq(popupWindowRoot.wifiDeviceName);
                     newConnected = nObj;
                 } else {
                     newNetworks.push(nObj);
@@ -1228,7 +1202,6 @@ Item {
             }
         }
 
-        if (!newConnected) popupWindowRoot.lastFetchedWifiSsid = "";
         popupWindowRoot.strongestWifiSsid = bestSsid;
 
         let isNowWifiConn = !!newConnected;
@@ -1640,7 +1613,7 @@ Item {
                     return calcActiveBeams();
                 }
 
-                property real beamCount: Math.min(8.0, activeBeams.length)
+                property real beamCount: Math.min(16.0, activeBeams.length)
                 property real coreRadius: {
                     var _tick = popupWindowRoot.globalOrbitAngle;
                     var r = 0;
@@ -1658,6 +1631,14 @@ Item {
                 property vector4d beam5: activeBeams.length > 5 ? activeBeams[5] : Qt.vector4d(-1, -1, -1, -1)
                 property vector4d beam6: activeBeams.length > 6 ? activeBeams[6] : Qt.vector4d(-1, -1, -1, -1)
                 property vector4d beam7: activeBeams.length > 7 ? activeBeams[7] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam8: activeBeams.length > 8 ? activeBeams[8] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam9: activeBeams.length > 9 ? activeBeams[9] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam10: activeBeams.length > 10 ? activeBeams[10] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam11: activeBeams.length > 11 ? activeBeams[11] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam12: activeBeams.length > 12 ? activeBeams[12] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam13: activeBeams.length > 13 ? activeBeams[13] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam14: activeBeams.length > 14 ? activeBeams[14] : Qt.vector4d(-1, -1, -1, -1)
+                property vector4d beam15: activeBeams.length > 15 ? activeBeams[15] : Qt.vector4d(-1, -1, -1, -1)
 
                 fragmentShader: "file://" + Caching.serpantinumDir + "/assets/shaders/vfx/node_beams_clipped.frag.qsb"
             }

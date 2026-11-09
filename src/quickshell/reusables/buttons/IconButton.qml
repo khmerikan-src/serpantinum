@@ -15,7 +15,6 @@ Item {
     property string buttonIcon: ""
     property string iconFont: ThemeBackend.iconFont
     property int iconFontSize: 18
-    // Lost in the reusables folder refactor; restored from v2.0.0 (990615f).
     property int iconOffsetX: 0
     property int iconOffsetY: 0
 

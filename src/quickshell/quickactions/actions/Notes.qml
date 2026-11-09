@@ -132,8 +132,9 @@ Item {
     property real currentTimeTicker: 0
     Timer {
         interval: 10000
-        running: true
+        running: root.visible
         repeat: true
+        triggeredOnStart: true
         onTriggered: root.currentTimeTicker = Date.now()
     }
 
@@ -146,23 +147,12 @@ Item {
         return NotesFormat.formatPreciseTime(timestamp);
     }
 
-    Process {
-        id: saveNotesProc
-    }
-
-    Process {
-        id: loadNotesProc
-        command: ["bash", "-c", "FILE='" + root.getStorageDir() + "/notes.json'; if [ -f \"$FILE\" ]; then cat \"$FILE\"; else echo '[]'; fi"]
-        stdout: StdioCollector {
-            id: loadNotesOut
-            onStreamFinished: {
-                root.restoreNotes(loadNotesOut.text);
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        loadNotesProc.running = true;
+    FileView {
+        id: notesStore
+        printErrors: false
+        path: root.getStorageDir() + "/notes.json"
+        onLoaded: root.restoreNotes(text())
+        onLoadFailed: root.restoreNotes("")
     }
 
     function restoreNotes(rawText) {
@@ -180,11 +170,7 @@ Item {
 
     function saveNotes() {
         if (!root.stateLoaded) return;
-        let dir = root.getStorageDir();
-        let jsonStr = JSON.stringify(root.notesList);
-        saveNotesProc.running = false;
-        saveNotesProc.command = ["bash", "-c", "mkdir -p '" + dir + "' && echo '" + jsonStr.replace(/'/g, "'\\''") + "' > '" + dir + "/notes.json'"];
-        saveNotesProc.running = true;
+        notesStore.setText(JSON.stringify(root.notesList));
     }
 
     function isSelected(id) {
