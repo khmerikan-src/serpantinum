@@ -247,7 +247,7 @@
       },
       "copysettings": {
         "title": "Copy settings",
-        "desc": "Copy configuration JSON to clipboard",
+        "desc": "Copy configuration JSON to clipboard. This includes sensitive data such as your location and custom paths",
         "button": "Copy settings"
       },
       "screenshot_on_release": {
@@ -267,6 +267,17 @@
           "dont_show": "Do not show me this again",
           "apply": "Apply",
           "cancel": "Cancel"
+        },
+        "import": {
+          "title": "Import and export presets",
+          "desc": "Add a preset from a JSON file. Use the export button on a preset to save a shareable copy",
+          "button": "Import",
+          "picker": "Select preset file"
+        },
+        "export": {
+          "title": "Export preset",
+          "button": "Export",
+          "dialog": "Export preset"
         }
       }
     },
@@ -793,6 +804,13 @@
           "title": "Add app"
         },
         "empty": "No apps are themed yet. Add one from the list"
+      },
+      "mode": {
+        "title": "Color mode",
+        "desc": "Switch the shell, GTK, Qt and other themed apps between light and dark",
+        "light": "Light",
+        "dark": "Dark",
+        "fixed": "Fixed by the selected color theme. Choose Matugen to switch modes"
       }
     },
     "file_picker": {
@@ -1847,7 +1865,7 @@
       "usageStyle": "Style",
       "lineThickness": "Thickness",
       "visualizerStyle": "Visualizer style",
-      "showNoLyrics": "Show \"no lyrics\" text",
+      "hideText": "Hide text",
       "textContent": "Text"
     },
     "align": {
